@@ -9,14 +9,14 @@
 | Campo | Valor |
 | --- | --- |
 | Producto | CRM + facturación electrónica ARCA (ex AFIP) |
-| Versión | 3.0 — MVP Lean |
+| Versión | 3.2 — MVP Lean (solo Admin; stack Supabase) |
 | Fecha | Julio 2026 |
 | Estado | Listo para desarrollo |
 | Modelo | Single-tenant / plantilla desplegable por empresa |
 | País fiscal | Argentina |
 | Integración | ARCA vía [Afip SDK](https://app.afipsdk.com/api/) (solo backend) |
 | API fiscal | Base URL: `https://app.afipsdk.com/api/` (docs: Context7 `/websites/afipsdk`) |
-| Stack | Next.js (App Router) + API routes / Server Actions + PostgreSQL (Neon) + storage S3-compatible |
+| Stack | Next.js (App Router) + API routes / Server Actions + PostgreSQL (Supabase) + Supabase Storage |
 | Ambiente inicial | Homologación ARCA obligatoria antes de producción |
 
 **Plantilla:** un deployment = una empresa emisora. El esquema incluye `issuer_profile_id` (y `tenant_id` nullable documentado) desde el día 1 para no bloquear multi-empresa futuro. En MVP solo hay un emisor activo por deployment.
@@ -61,7 +61,7 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 ### Incluido
 
-* Login y 3 roles (Admin, Operador, Lector).
+* Login con **un único rol: Admin** (usuario administrador del deployment).
 * Configuración fiscal del emisor + 1 punto de venta + homologación/producción.
 * ABM de clientes (datos fiscales mínimos) y contactos.
 * Conceptos facturables simples (sin listas de precios).
@@ -73,11 +73,12 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 * Nota de crédito básica asociada a factura autorizada.
 * Auditoría inmutable.
 * Indicadores UI mínimos: error ARCA y config fiscal incompleta.
+* Prueba end-to-end del sistema de facturación en **homologación ARCA** (config → borrador → emisión → CAE → PDF → CC → pago).
 
 ### Excluido (post-MVP)
 
 * Multi-tenant / multi-empresa operativa (solo preparación de IDs).
-* Roles Vendedor / Cajero / Contador separados.
+* Roles adicionales (Operador, Lector, Vendedor, Cajero, Contador) y permisos granulares (`can_emit`, etc.).
 * Facturación recurrente y jobs asociados.
 * Notas de débito.
 * Interacciones comerciales, scoring, health scores, etiquetas VIP/riesgo.
@@ -93,29 +94,32 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 ## 5. Roles y permisos
 
-### Roles
+### Rol MVP
+
+En el MVP existe **un solo rol: Admin**. Toda la operación del sistema (CRM, facturación, cobros, config fiscal y auditoría) la realiza ese administrador autenticado. No hay Operador, Lector ni flags de permiso parciales.
 
 | Rol | Descripción |
 | --- | --- |
-| **Admin** | Control total: usuarios, config fiscal ARCA, emisión, pagos, auditoría. |
-| **Operador** | Clientes, contactos, conceptos, borradores, registro de pagos e imputaciones. No configura ARCA ni gestiona usuarios. Emite solo si Admin le otorga permiso explícito (`can_emit`). |
-| **Lector** | Solo lectura de clientes, comprobantes y PDF. Sin exportar ni modificar. |
+| **Admin** | Control total del deployment: config fiscal ARCA, clientes/contactos, conceptos, borradores, emisión (homologación y producción), PDF/email, pagos e imputaciones, NC, auditoría. Usuario único operativo del MVP. |
 
-### Matriz MVP
+### Capacidades del Admin (MVP)
 
-| Acción | Admin | Operador | Lector |
-| --- | ---: | ---: | ---: |
-| Ver clientes / comprobantes / PDF | Sí | Sí | Sí |
-| Crear / editar clientes y contactos | Sí | Sí | No |
-| Editar datos fiscales / límite de crédito | Sí | Sí | No |
-| Gestionar conceptos | Sí | Sí | No |
-| Crear borrador | Sí | Sí | No |
-| Emitir / reintentar emisión | Sí | Solo con `can_emit` | No |
-| Enviar factura por email | Sí | Sí | No |
-| Registrar / imputar pagos | Sí | Sí | No |
-| Anular imputación / NC | Sí | No | No |
-| Ver auditoría | Sí | No | No |
-| Configurar ARCA / usuarios | Sí | No | No |
+| Acción | Admin |
+| --- | ---: |
+| Ver clientes / comprobantes / PDF | Sí |
+| Crear / editar clientes y contactos | Sí |
+| Editar datos fiscales / límite de crédito | Sí |
+| Gestionar conceptos | Sí |
+| Crear borrador | Sí |
+| Emitir / reintentar emisión (homologación y producción) | Sí |
+| Enviar factura por email | Sí |
+| Registrar / imputar pagos | Sí |
+| Anular imputación / emitir NC | Sí |
+| Ver auditoría | Sí |
+| Configurar ARCA / credenciales / ambiente | Sí |
+| Probar el flujo completo de facturación en homologación | Sí |
+
+**Post-MVP:** introducir roles granulares (Operador, Lector, etc.) y permisos como `can_emit` sin reescribir el modelo de negocio.
 
 ---
 
@@ -131,9 +135,10 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 **Reglas:**
 
-* Solo Admin edita.
+* El Admin configura y valida el emisor (única figura operativa del MVP).
 * Frontend nunca recibe certificado ni clave.
 * Separar homologación de producción; producción exige confirmación explícita.
+* Homologación es el ambiente por defecto para **probar facturación** de punta a punta antes de activar producción.
 * Toda modificación audita.
 * Un `issuer_profile` activo por deployment en MVP.
 
@@ -149,9 +154,9 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 **Reglas:**
 
-* No emitir a inactivo/bloqueado (salvo override Admin).
+* No emitir a inactivo/bloqueado (salvo override explícito del Admin).
 * No emitir sin datos fiscales mínimos del receptor.
-* Si supera límite de crédito (si está configurado): bloquear o pedir confirmación Admin.
+* Si supera límite de crédito (si está configurado): bloquear o pedir confirmación del Admin.
 * Un solo contacto principal y un solo de facturación por cliente.
 * Sin contacto de facturación → usar email principal del cliente.
 * Cambios de CUIT, condición fiscal o límite de crédito → auditoría.
@@ -168,9 +173,10 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 **Reglas:**
 
-* Operador crea borradores; emisión según matriz.
+* El Admin crea borradores y emite (no hay otro rol emisor en MVP).
 * Recalcular totales al cambiar ítems; totales enviados a ARCA = totales persistidos.
 * Comprobante autorizado inmutable; corrección vía NC.
+* En homologación, el Admin puede recorrer el flujo completo de prueba sin impacto fiscal real.
 
 ### 6.4 Motor fiscal ARCA
 
@@ -197,9 +203,9 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 1. Crear/seleccionar cliente y borrador.
 2. Pre-cargar y validar datos, estado cliente, crédito, config emisor.
-3. Usuario autorizado solicita emisión.
+3. El Admin solicita emisión (única figura autorizada en MVP).
 4. Backend lock del borrador → consulta último número si corresponde → envía a ARCA.
-5. **Autorizado:** guarda CAE/número/respuesta → PDF → movimiento de CC → auditoría → (email solo si el usuario lo dispara).
+5. **Autorizado:** guarda CAE/número/respuesta → PDF → movimiento de CC → auditoría → (email solo si el Admin lo dispara).
 6. **Rechazado:** guarda respuesta, no impacta saldo, permite corregir/reintentar según reglas.
 7. **Error técnico:** guarda intento, no duplica, permite reconsulta/reintento controlado.
 
@@ -221,7 +227,7 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 * PDF solo si autorizado (o válido en homologación).
 * Incluir emisor, receptor, importes, CAE, vencimiento CAE, QR si corresponde.
-* Guardar en storage; DB guarda referencia.
+* Guardar en Supabase Storage; DB guarda referencia (path/URL del objeto).
 * Reenvío por email al contacto de facturación; registrar resultado del envío.
 * Sin envío automático en MVP.
 
@@ -237,7 +243,7 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 **Pago:** cliente, fecha, monto, moneda, método (efectivo / transferencia / cheque / tarjeta / otro), referencia, notas, usuario, estado.
 
-**Imputación:** un pago a una o varias facturas; parcial permitido; no auto-imputar a la más antigua; no imputar más que el saldo pendiente; deshacer solo Admin.
+**Imputación:** un pago a una o varias facturas; parcial permitido; no auto-imputar a la más antigua; no imputar más que el saldo pendiente; deshacer imputación permitido al Admin (única figura operativa).
 
 **Reglas:**
 
@@ -257,11 +263,11 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 * Factura autorizada no se elimina ni edita.
 * NC asociada al comprobante original; propio CAE.
 * CC se actualiza solo si NC autorizada.
-* Monto NC ≤ saldo compensable de la factura (salvo override Admin).
+* Monto NC ≤ saldo compensable de la factura (salvo override explícito del Admin).
 
 ### 6.8 Auditoría
 
-**Eventos mínimos:** cambios de CUIT/condición fiscal/límite de crédito; emisión, rechazo, reintento; NC; pagos e imputaciones/reverso; config ARCA; roles/usuarios; baja lógica de cliente/contacto.
+**Eventos mínimos:** cambios de CUIT/condición fiscal/límite de crédito; emisión, rechazo, reintento; NC; pagos e imputaciones/reverso; config ARCA; alta/cambio de usuario Admin; baja lógica de cliente/contacto.
 
 **Campos:** timestamp, usuario, entidad, id, acción, campo, valor anterior/nuevo, IP/UA si disponible, motivo en acciones críticas.
 
@@ -273,7 +279,8 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 ### Entidades
 
-**Seguridad:** `users` · `roles` · `permissions` / flags (`can_emit`) · `audit_logs`
+**Seguridad:** `users` (rol fijo Admin en MVP) · `audit_logs`  
+*(tabla `roles` / flags como `can_emit` reservados para post-MVP; no se exponen en UI ni se aplican en autorización del MVP)*
 
 **Plantilla / emisor:** `issuer_profiles` · `issuer_fiscal_settings` · `arca_credentials` · `arca_ticket_storage` · `fiscal_points_of_sale`  
 *(incluir `issuer_profile_id`; `tenant_id` nullable reservado para multi-tenant futuro)*
@@ -326,25 +333,26 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 ```text
 [Next.js UI] → [Server Actions / API routes]
                     ↓
-        Auth · RBAC · Services · Repositories
+        Auth (Admin) · Services · Repositories
                     ↓
          ArcaAdapter (Afip SDK API) · PDF · Email · Storage
                     ↓
          https://app.afipsdk.com/api/  →  ARCA (WSAA / WSFE)
                     ↓
-         Neon PostgreSQL · Object Storage · Tickets WSAA persistidos
+         Supabase (PostgreSQL + Storage) · Tickets WSAA persistidos
 ```
 
-* Frontend: CRM, borradores, visualización, descarga PDF, pagos. Sin lógica fiscal sensible.
-* Backend: authz, orquestación de emisión, certificados, tickets WSAA, PDF, email, transacciones, auditoría, saldos.
+* Frontend: CRM, borradores, visualización, descarga PDF, pagos, config fiscal y prueba de emisión. Sin lógica fiscal sensible.
+* Backend: autenticación Admin, orquestación de emisión, certificados, tickets WSAA, PDF, email, transacciones, auditoría, saldos.
 * Adapter propio alrededor de Afip SDK (`https://app.afipsdk.com/api/`): request interno normalizado ↔ `/api/v1/afip/auth` y `/api/v1/afip/requests`; persistir request/response; errores funcionales vs técnicos.
+* Datos: PostgreSQL en Supabase; PDFs y archivos (p. ej. logo del emisor) en **Supabase Storage** (sin bucket S3 externo).
 * Credenciales: CUIT, cert, clave, ambiente, access token Afip SDK, estado, fechas de prueba/emisión; cifrado en reposo; rotación manual; nunca al cliente.
 
 ---
 
 ## 10. Requerimientos no funcionales
 
-**Seguridad:** auth obligatoria; RBAC en backend; secretos cifrados; anti doble emisión; validación server-side; backups DB.
+**Seguridad:** auth obligatoria; sesión restringida a Admin en MVP; secretos cifrados; anti doble emisión; validación server-side; backups DB. Diseño preparado para RBAC multi-rol post-MVP.
 
 **Disponibilidad:** CRM usable si ARCA está caído; emisión en error técnico controlado; comprobantes autorizados siempre consultables.
 
@@ -352,7 +360,7 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 **Plantilla / evolución:** single-tenant por deployment; `issuer_profile_id` en config y comprobantes; evitar hardcode del emisor en lógica de negocio.
 
-**Mantenibilidad:** capas controllers/services/repos/adapters; tests de totales, saldos, permisos y anti-duplicación.
+**Mantenibilidad:** capas controllers/services/repos/adapters; tests de totales, saldos, auth Admin y anti-duplicación.
 
 ---
 
@@ -368,7 +376,8 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 
 * [ ] Borrador con datos pre-cargados del cliente.
 * [ ] Validar estado, datos fiscales y crédito antes de emitir.
-* [ ] Emitir factura en homologación; persistir CAE, vencimiento, PV, número, respuesta.
+* [ ] Admin emite factura en homologación; persistir CAE, vencimiento, PV, número, respuesta.
+* [ ] Flujo de prueba completo en homologación: config emisor → cliente → borrador → emisión → CAE → PDF → CC.
 * [ ] PDF descargable; comprobante autorizado no editable.
 * [ ] Rechazo/error técnico sin impacto en saldo; intentos registrados.
 * [ ] NC básica asociada a factura autorizada con CAE propio.
@@ -376,41 +385,33 @@ Una plataforma plantilla que conecte CRM mínimo + motor financiero + emisión f
 ### Finanzas
 
 * [ ] Factura autorizada impacta CC.
-* [ ] Registrar pago e imputar a una o más facturas; ver saldo y vencido.
+* [ ] Admin registra pago e imputa a una o más facturas; ver saldo y vencido.
 
 ### Auditoría y seguridad
 
 * [ ] Logs de cambios sensibles, emisión y config fiscal; no editables desde la app.
-* [ ] Permisos enforced en backend; certificados invisibles en frontend.
-* [ ] Ambiente fiscal activo visible; Operador sin `can_emit` no emite.
+* [ ] Solo Admin autenticado opera el sistema; certificados invisibles en frontend.
+* [ ] Ambiente fiscal activo visible en UI (homologación vs producción).
 
 ---
 
-## 12. Roadmap (~6–8 semanas)
+## 12. Roadmaps de implementación
 
-### Fase 1 — Base y CRM (sem. 1–2)
+El plan de entrega por tecnología (~6–8 semanas, 4 fases sincronizadas) vive fuera de este PRD para no mezclar requisitos de producto con desglose técnico:
 
-Setup Next.js + Neon, auth, roles, modelo inicial, ABM clientes/contactos/direcciones, búsqueda simple, auditoría base, `issuer_profile_id` en esquema.
+| Track | Documento |
+| --- | --- |
+| Backend | [ROADMAP-BACKEND.md](./ROADMAP-BACKEND.md) |
+| Frontend | [ROADMAP-FRONTEND.md](./ROADMAP-FRONTEND.md) |
 
-**Entregable:** CRM usable sin emisión.
+**Fases compartidas (resumen):**
 
-### Fase 2 — Comercial y financiero interno (sem. 3–4)
+1. **Base y CRM** (sem. 1–2) — CRM usable por Admin sin emisión.
+2. **Comercial y financiero interno** (sem. 3–4) — borradores y deuda/pagos sin ARCA.
+3. **ARCA homologación** (sem. 5–6) — factura/NC con CAE; saldo solo si autorizado.
+4. **PDF, email, producción controlada** (sem. 7–8) — flujo completo para casos simples en producción.
 
-Conceptos, borradores, totales, límite de crédito, movimientos/CC, pagos e imputación.
-
-**Entregable:** borradores y deuda/pagos sin ARCA.
-
-### Fase 3 — ARCA homologación (sem. 5–6)
-
-Config emisor, credenciales cifradas, adapter Afip SDK (`https://app.afipsdk.com/api/`), tickets persistentes, emisión A/B/C, estados, errores, anti-duplicación, NC básica en homologación.
-
-**Entregable:** factura (y NC) con CAE en homologación; saldo solo si autorizado.
-
-### Fase 4 — PDF, email, producción controlada (sem. 7–8)
-
-PDF + storage, email manual + logs, hardening, tests críticos, activación producción con confirmación, backup/monitoreo, doc operativa.
-
-**Entregable:** flujo completo listo para casos simples en producción (sujeto a validación fiscal externa).
+Este PRD es la fuente de verdad funcional. Los roadmaps deben respetarlo en todo momento y mantener coherencia entre sí (mismos hitos H1–H4).
 
 ---
 
@@ -419,7 +420,8 @@ PDF + storage, email manual + logs, hardening, tests críticos, activación prod
 | Riesgo | Impacto | Mitigación |
 | --- | --- | --- |
 | Mala config / credenciales ARCA | Alto | Homologación obligatoria; estado `error` visible |
-| Exposición de certificados | Alto | Backend-only + cifrado + RBAC |
+| Exposición de certificados | Alto | Backend-only + cifrado + auth Admin |
+| Ataques de fuerza bruta / flood de login | Alto | Rate limiting por IP y por usuario; bloqueo temporal tras N fallos; CAPTCHA o delay progresivo si aplica |
 | Doble emisión | Alto | Lock, idempotency, unicidad PV/tipo/número/ambiente |
 | Totales / IVA incorrectos | Alto | Cálculo server-side + tests |
 | Timeout / ARCA caído | Alto | Estados técnicos, reconsulta, no reemitir a ciegas |
@@ -437,14 +439,14 @@ PDF + storage, email manual + logs, hardening, tests críticos, activación prod
 6. Homologación antes de producción.
 7. Un PV y un emisor activo por deployment en MVP.
 8. `issuer_profile_id` (y `tenant_id` nullable) desde el esquema inicial.
-9. Stack: Next.js + Neon + storage S3-compatible.
+9. Stack: Next.js + Supabase (PostgreSQL + Storage); sin S3 externo.
 10. Integración fiscal es parte del MVP, no post-MVP.
 
 ---
 
 ## 15. Backlog post-MVP
 
-Multi-empresa / multi-tenant operativo · roles granulares · recurrencia · ND · padrón ARCA · listas de precios · interacciones CRM · documentos con vencimiento · alertas/recordatorios · export · reportes fiscales / libro IVA · FCE MiPyME · exportación · tributos/percepciones · multi-POS · WhatsApp · bancos/PSP · presupuestos · stock · API pública / webhooks · mobile.
+Multi-empresa / multi-tenant operativo · roles granulares (Operador, Lector, etc.) y permisos (`can_emit`) · recurrencia · ND · padrón ARCA · listas de precios · interacciones CRM · documentos con vencimiento · alertas/recordatorios · export · reportes fiscales / libro IVA · FCE MiPyME · exportación · tributos/percepciones · multi-POS · WhatsApp · bancos/PSP · presupuestos · stock · API pública / webhooks · mobile.
 
 ---
 
