@@ -97,6 +97,7 @@ El FE consume las operaciones documentadas en [ROADMAP-BACKEND.md](./ROADMAP-BAC
 
 ### Dependencias del backend
 
+* Contrato operativo: [CONTRATO-FRONTEND.md](./CONTRATO-FRONTEND.md).
 * Requiere H1 backend: auth + CRUD CRM + audit read.
 * No bloquear esta fase por ausencia de ARCA.
 
@@ -289,4 +290,4 @@ UI multi-empresa · roles Operador/Lector/etc. · dashboard KPI-heavy · buscado
 
 ---
 
-*Versión alineada al PRD 3.2 — MVP Lean (solo Admin; stack Supabase).*
+*Versión alineada al PRD 3.2 — MVP Lean (solo Admin; Supabase Auth/Storage + Prisma).*

@@ -9,14 +9,14 @@
 | Campo | Valor |
 | --- | --- |
 | Producto | CRM + facturación electrónica ARCA (ex AFIP) |
-| Versión | 3.2 — MVP Lean (solo Admin; stack Supabase) |
+| Versión | 3.2 — MVP Lean (solo Admin; Supabase Auth/Storage + Prisma) |
 | Fecha | Julio 2026 |
 | Estado | Listo para desarrollo |
 | Modelo | Single-tenant / plantilla desplegable por empresa |
 | País fiscal | Argentina |
 | Integración | ARCA vía [Afip SDK](https://app.afipsdk.com/api/) (solo backend) |
 | API fiscal | Base URL: `https://app.afipsdk.com/api/` (docs: Context7 `/websites/afipsdk`) |
-| Stack | Next.js (App Router) + API routes / Server Actions + PostgreSQL (Supabase) + Supabase Storage |
+| Stack | Next.js (App Router) + API routes / Server Actions + Supabase (Auth + Storage + PostgreSQL) + Prisma ORM |
 | Ambiente inicial | Homologación ARCA obligatoria antes de producción |
 
 **Plantilla:** un deployment = una empresa emisora. El esquema incluye `issuer_profile_id` (y `tenant_id` nullable documentado) desde el día 1 para no bloquear multi-empresa futuro. En MVP solo hay un emisor activo por deployment.
@@ -333,19 +333,19 @@ En el MVP existe **un solo rol: Admin**. Toda la operación del sistema (CRM, fa
 ```text
 [Next.js UI] → [Server Actions / API routes]
                     ↓
-        Auth (Admin) · Services · Repositories
+        Auth (Supabase) · Services · Repositories (Prisma)
                     ↓
          ArcaAdapter (Afip SDK API) · PDF · Email · Storage
                     ↓
          https://app.afipsdk.com/api/  →  ARCA (WSAA / WSFE)
                     ↓
-         Supabase (PostgreSQL + Storage) · Tickets WSAA persistidos
+         PostgreSQL (Supabase) vía Prisma · Supabase Storage · Tickets WSAA persistidos
 ```
 
 * Frontend: CRM, borradores, visualización, descarga PDF, pagos, config fiscal y prueba de emisión. Sin lógica fiscal sensible.
-* Backend: autenticación Admin, orquestación de emisión, certificados, tickets WSAA, PDF, email, transacciones, auditoría, saldos.
+* Backend: autenticación Admin (Supabase Auth), orquestación de emisión, certificados, tickets WSAA, PDF, email, transacciones, auditoría, saldos.
 * Adapter propio alrededor de Afip SDK (`https://app.afipsdk.com/api/`): request interno normalizado ↔ `/api/v1/afip/auth` y `/api/v1/afip/requests`; persistir request/response; errores funcionales vs técnicos.
-* Datos: PostgreSQL en Supabase; PDFs y archivos (p. ej. logo del emisor) en **Supabase Storage** (sin bucket S3 externo).
+* Datos de dominio: esquema, migraciones y consultas con **Prisma** sobre PostgreSQL hospedado en Supabase; PDFs y archivos (p. ej. logo del emisor) en **Supabase Storage** (sin bucket S3 externo).
 * Credenciales: CUIT, cert, clave, ambiente, access token Afip SDK, estado, fechas de prueba/emisión; cifrado en reposo; rotación manual; nunca al cliente.
 
 ---
@@ -439,7 +439,7 @@ Este PRD es la fuente de verdad funcional. Los roadmaps deben respetarlo en todo
 6. Homologación antes de producción.
 7. Un PV y un emisor activo por deployment en MVP.
 8. `issuer_profile_id` (y `tenant_id` nullable) desde el esquema inicial.
-9. Stack: Next.js + Supabase (PostgreSQL + Storage); sin S3 externo.
+9. Stack: Next.js + Supabase (Auth + Storage + PostgreSQL) + Prisma ORM; sin S3 externo.
 10. Integración fiscal es parte del MVP, no post-MVP.
 
 ---

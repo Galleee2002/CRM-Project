@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+}
+
+enum ClientType {
+  persona
+  empresa
+}
+
+enum DocumentType {
+  CUIT
+  CUIL
+  DNI
+}
+
+enum ClientStatus {
+  activo
+  inactivo
+  bloqueado
+}
+
+enum AddressKind {
+  fiscal
+  comercial
+}
+
+/// App profile linked to Supabase Auth user. MVP: only Admin role.
+model User {
+  id         String   @id @default(cuid())
+  authUserId String   @unique @map("auth_user_id")
+  email      String   @unique
+  fullName   String?  @map("full_name")
+  role       UserRole @default(admin)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+/// Single active issuer per deployment in MVP. tenant_id reserved for multi-tenant.
+model IssuerProfile {
+  id        String   @id @default(cuid())
+  tenantId  String?  @map("tenant_id")
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  clients Client[]
+
+  @@map("issuer_profiles")
+}
+
+model Client {
+  id              String       @id @default(cuid())
+  issuerProfileId String       @map("issuer_profile_id")
+  type            ClientType
+  legalName       String       @map("legal_name")
+  tradeName       String?      @map("trade_name")
+  documentType    DocumentType @map("document_type")
+  documentNumber  String       @map("document_number")
+  taxCondition    String       @map("tax_condition")
+  email           String?
+  phone           String?
+  status          ClientStatus @default(activo)
+  notes           String?
+  creditLimit     Decimal?     @map("credit_limit") @db.Decimal(18, 2)
+  assignedUserId  String?      @map("assigned_user_id")
+  deletedAt       DateTime?    @map("deleted_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  issuerProfile IssuerProfile   @relation(fields: [issuerProfileId], references: [id])
+  contacts      ClientContact[]
+  addresses     ClientAddress[]
+
+  @@index([documentNumber])
+  @@index([legalName])
+  @@index([email])
+  @@index([issuerProfileId, status])
+  @@map("clients")
+}
+
+model ClientContact {
+  id         String    @id @default(cuid())
+  clientId   String    @map("client_id")
+  firstName  String    @map("first_name")
+  lastName   String    @map("last_name")
+  email      String?
+  phone      String?
+  isPrimary  Boolean   @default(false) @map("is_primary")
+  isBilling  Boolean   @default(false) @map("is_billing")
+  notes      String?
+  deletedAt  DateTime? @map("deleted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("client_contacts")
+}
+
+model ClientAddress {
+  id         String      @id @default(cuid())
+  clientId   String      @map("client_id")
+  kind       AddressKind @default(fiscal)
+  street     String
+  number     String?
+  floor      String?
+  apartment  String?
+  city       String
+  state      String
+  postalCode String?     @map("postal_code")
+  country    String      @default("AR")
+  notes      String?
+  deletedAt  DateTime?   @map("deleted_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, kind])
+  @@map("client_addresses")
+}
+
+/// Append-only audit trail. App API is create + list only (no update/delete).
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  clientId  String?  @map("client_id")
+  entity    String
+  entityId  String   @map("entity_id")
+  action    String
+  field     String?
+  oldValue  String?  @map("old_value") @db.Text
+  newValue  String?  @map("new_value") @db.Text
+  reason    String?
+  ip        String?
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([clientId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Login rate limiting / temporary lockout.
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  email       String
+  ip          String?
+  success     Boolean  @default(false)
+  attemptedAt DateTime @default(now()) @map("attempted_at")
+
+  @@index([email, attemptedAt])
+  @@index([ip, attemptedAt])
+  @@map("login_attempts")
+}

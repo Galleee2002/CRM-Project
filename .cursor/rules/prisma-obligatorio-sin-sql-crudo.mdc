@@ -1,0 +1,12 @@
+---
+description: Acceso a datos solo vía Prisma; prohibido SQL crudo
+alwaysApply: true
+---
+
+# Prisma obligatorio — sin SQL crudo
+
+- Toda lectura/escritura a la base de datos va por **Prisma Client** (`prisma.*`).
+- **Prohibido** SQL crudo: `$queryRaw`, `$executeRaw`, `$queryRawUnsafe`, `$executeRawUnsafe`, `prisma db execute` con SQL ad hoc, o queries SQL embebidas en el app code.
+- Cambios de esquema: editar `prisma/schema.prisma` + migraciones Prisma (`db:migrate` / migrate dev), no DDL manual.
+- Scripts de datos: Prisma Client o seed de Prisma; no scripts SQL sueltos para la app.
+- Excepción: solo si el usuario lo autoriza explícitamente por escrito en el prompt.

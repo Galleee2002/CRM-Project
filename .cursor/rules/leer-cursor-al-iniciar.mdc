@@ -1,0 +1,12 @@
+---
+description: Leer .cursor/rules al ingresar al proyecto antes de actuar
+alwaysApply: true
+---
+
+# Leer `.cursor` al iniciar
+
+Al comenzar cualquier sesión o tarea en este repo:
+
+1. Revisar `.cursor/rules/` (todas las rules `.mdc`) antes de explorar código, proponer cambios o ejecutar comandos.
+2. Tratar esas rules como obligatorias junto con `AGENTS.md`.
+3. Si hay conflicto entre una rule de `.cursor` y un hábito del agente, prevalece `.cursor` + `AGENTS.md`.

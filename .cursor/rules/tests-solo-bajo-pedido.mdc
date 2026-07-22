@@ -1,0 +1,11 @@
+---
+description: No ejecutar tests, lint ni typecheck salvo pedido explícito
+alwaysApply: true
+---
+
+# Tests solo bajo pedido
+
+- **No** correr tests (`vitest`, `npm test`, `npm run test`, etc.) en cada prompt.
+- **No** lanzar lint, typecheck, build o smoke “por verificación” salvo que el usuario lo pida.
+- Ejecutar tests/lint/build **solo** cuando el usuario lo solicite de forma explícita.
+- Si una skill o checklist sugiere verificar automáticamente, omitir esa parte salvo pedido del usuario.

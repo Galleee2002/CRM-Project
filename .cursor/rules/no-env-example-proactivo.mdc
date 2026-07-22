@@ -1,0 +1,11 @@
+---
+description: No crear ni regenerar .env.example salvo pedido explícito
+alwaysApply: true
+---
+
+# No crear `.env.example` por defecto
+
+- **No** crear, regenerar, reescribir ni “sincronizar” `.env.example` en cada prompt.
+- Solo tocar `.env.example` si el usuario lo pide explícitamente, o si una variable **nueva** ya está en uso en el código y el archivo existe y debe documentarse.
+- Nunca inventar un `.env.example` completo “por higiene” si el usuario no lo pidió.
+- Nunca commitear `.env` / `.env.local` ni secretos.

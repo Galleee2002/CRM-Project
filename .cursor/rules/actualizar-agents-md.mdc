@@ -1,0 +1,15 @@
+---
+description: Mantener AGENTS.md al día cuando cambie el proyecto
+alwaysApply: true
+---
+
+# Actualizar `AGENTS.md` cuando haga falta
+
+`AGENTS.md` es la guía operativa del repo. Actualizarlo en el mismo cambio (o justo después) si se modifica algo de:
+
+- Stack, comandos npm, variables de entorno relevantes
+- Estructura de carpetas / dominios `features/`
+- Reglas no negociables o convenciones de código
+- Flujos núcleo o límites MVP que el agente deba respetar
+
+No duplicar el PRD/roadmaps: solo lo necesario para no romper el proyecto. Si hay conflicto docs ↔ `AGENTS.md` en lo operativo del agente, alinear `AGENTS.md` y remitir detalle a `docs/`.

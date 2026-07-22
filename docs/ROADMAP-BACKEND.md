@@ -2,7 +2,7 @@
 
 > **Fuente de verdad:** [PRD.md](./PRD.md). Ante cualquier discrepancia entre este documento y el PRD, prevalece el PRD.  
 > **Track paralelo:** [ROADMAP-FRONTEND.md](./ROADMAP-FRONTEND.md) — mismas fases, semanas e hitos de integración.  
-> **Horizonte:** ~6–8 semanas · **Rol MVP:** Admin único · **Stack:** Next.js (Server Actions / API routes) + PostgreSQL (Supabase) + Supabase Storage + Afip SDK
+> **Horizonte:** ~6–8 semanas · **Rol MVP:** Admin único · **Stack:** Next.js (Server Actions / API routes) + PostgreSQL (Supabase) + Prisma + Supabase Storage + Afip SDK
 
 ---
 
@@ -22,6 +22,8 @@
 ---
 
 ## Contratos que el frontend consume
+
+Contrato operativo FE ↔ backend: [CONTRATO-FRONTEND.md](./CONTRATO-FRONTEND.md).
 
 El backend expone operaciones (Server Actions / API routes) con respuestas normalizadas. El frontend **no** decide lógica fiscal ni saldos.
 
@@ -77,9 +79,10 @@ El backend expone operaciones (Server Actions / API routes) con respuestas norma
 
 1. **Infraestructura**
    * Proyecto Next.js (App Router) con Server Actions / API routes.
-   * Proyecto Supabase: PostgreSQL + bucket Storage (logo/PDFs futuros).
+   * Proyecto Supabase: PostgreSQL + Auth + bucket Storage (logo/PDFs futuros).
+   * Prisma: `prisma migrate` para el esquema de dominio; Prisma Client en repositories.
    * Variables de entorno; sin secretos en cliente.
-2. **Esquema inicial**
+2. **Esquema inicial** (Prisma)
    * `users` (rol fijo Admin en MVP).
    * `issuer_profiles` con `issuer_profile_id`; `tenant_id` nullable reservado.
    * `clients`, `client_contacts`, `client_addresses`.
@@ -297,4 +300,4 @@ Multi-tenant operativo · roles granulares · recurrencia · ND · padrón ARCA 
 
 ---
 
-*Versión alineada al PRD 3.2 — MVP Lean (solo Admin; stack Supabase).*
+*Versión alineada al PRD 3.2 — MVP Lean (solo Admin; Supabase Auth/Storage + Prisma).*
